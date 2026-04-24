@@ -1,19 +1,3 @@
-/*
- * Copyright 2002-2014 the original author or authors.
- *
- * Licensed under the Apache License, Version 2.0 (the "License");
- * you may not use this file except in compliance with the License.
- * You may obtain a copy of the License at
- *
- *      http://www.apache.org/licenses/LICENSE-2.0
- *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
- */
-
 package com.example.heroku;
 
 import com.zaxxer.hikari.HikariConfig;
@@ -25,6 +9,9 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.context.annotation.Bean;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.ResponseBody;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -33,6 +20,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.Map;
+import java.util.UUID;
 
 @Controller
 @SpringBootApplication
@@ -56,14 +44,20 @@ public class HerokuApplication {
   @RequestMapping("/db")
   String db(Map<String, Object> model) {
     try (Connection connection = dataSource.getConnection()) {
+      
+      System.out.println("Print statement inside the Main.db method. Christopher Hastings");
+
       Statement stmt = connection.createStatement();
-      stmt.executeUpdate("CREATE TABLE IF NOT EXISTS ticks (tick timestamp)");
-      stmt.executeUpdate("INSERT INTO ticks VALUES (now())");
-      ResultSet rs = stmt.executeQuery("SELECT tick FROM ticks");
+      stmt.executeUpdate("CREATE TABLE IF NOT EXISTS table_timestamp_and_random_string (tick timestamp, random_string varchar(50))");
+      
+      String randomStr = UUID.randomUUID().toString().substring(0, 8);
+      stmt.executeUpdate("INSERT INTO table_timestamp_and_random_string VALUES (now(), '" + randomStr + "')");
+      
+      ResultSet rs = stmt.executeQuery("SELECT * FROM table_timestamp_and_random_string");
 
       ArrayList<String> output = new ArrayList<String>();
       while (rs.next()) {
-        output.add("Read from DB: " + rs.getTimestamp("tick"));
+        output.add("Read from DB: " + rs.getTimestamp("tick") + " " + rs.getString("random_string"));
       }
 
       model.put("records", output);
@@ -72,6 +66,28 @@ public class HerokuApplication {
       model.put("message", e.getMessage());
       return "error";
     }
+  }
+
+  @RequestMapping(value = "/dbinput", method = RequestMethod.GET)
+  @ResponseBody
+  public String dbInput() {
+      return "<h1>Add Custom String</h1>" +
+             "<form method='POST' action='/dbinput'>" +
+             "<input type='text' name='userInput' required placeholder='Enter a string...'/>" +
+             "<button type='submit'>Submit</button>" +
+             "</form>";
+  }
+
+  @RequestMapping(value = "/dbinput", method = RequestMethod.POST)
+  public String handleDbInput(@RequestParam("userInput") String userInput, Map<String, Object> model) {
+      try (Connection connection = dataSource.getConnection()) {
+          Statement stmt = connection.createStatement();
+          stmt.executeUpdate("INSERT INTO table_timestamp_and_random_string VALUES (now(), '" + userInput + "')");
+          return "redirect:/db";
+      } catch (Exception e) {
+          model.put("message", e.getMessage());
+          return "error";
+      }
   }
 
   @Bean
@@ -84,5 +100,4 @@ public class HerokuApplication {
       return new HikariDataSource(config);
     }
   }
-
 }
